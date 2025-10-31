@@ -1,0 +1,45 @@
+{
+  "name": "dtrader-server",
+  "version": "1.0.1",
+  "description": "Серверная часть торгового бота для Gate.io - TVP Sniper Strategy",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "npm run build && node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "dev:watch": "nodemon",
+    "build": "tsc",
+    "build:watch": "tsc -w",
+    "clean": "rm -rf dist",
+    "pm2:start": "npm run build && pm2 start dist/index.js --name dtrader",
+    "pm2:stop": "pm2 stop dtrader",
+    "pm2:restart": "pm2 restart dtrader",
+    "pm2:delete": "pm2 delete dtrader",
+    "pm2:logs": "pm2 logs dtrader",
+    "pm2:status": "pm2 status",
+    "pm2:monit": "pm2 monit"
+  },
+  "keywords": [
+    "trading",
+    "crypto",
+    "gate.io",
+    "bot",
+    "tvp-sniper",
+    "algorithmic-trading"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "axios": "^1.7.7",
+    "ws": "^8.18.0",
+    "chalk": "^4.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/ws": "^8.5.13",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2",
+    "pm2": "^5.4.3",
+    "nodemon": "^3.1.7"
+  }
+}
