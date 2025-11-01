@@ -1,268 +1,160 @@
-/**
- * @file src/config/env.ts
- * @version 0
- * @description Загрузка и валидация переменных окружения
- * @changelog
- *   0 - Первая версия (2025-01-22)
- */
-
 import * as dotenv from "dotenv";
 import * as path from "path";
 
-// Загружаем переменные окружения из .env файла
-// Пытаемся из нескольких стандартных путей, чтобы покрыть ts-node и compiled dist
 dotenv.config();
-dotenv.config({ path: path.resolve(process.cwd(), ".env") });
-dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
-/**
- * Интерфейс конфигурации приложения
- */
-interface AppConfig {
-  // Gate.io API
+export interface AppConfig {
   gateio: {
     apiKey: string;
     apiSecret: string;
     apiUrl: string;
     wsUrl: string;
   };
-
-  // Торговые настройки
   trading: {
-    symbol: string;
+    symbols: string[]; // 🆕 Массив символов
+    market: "spot" | "futures"; // 🆕 Тип рынка
+    leverage: number; // 🆕 Плечо
     orderBookDepth: number;
   };
-
-  // WebSocket Server
   server: {
     wsPort: number;
   };
-
-  // База данных
   database: {
     path: string;
     orderBookPressureInterval: number;
     retentionDays: number;
   };
-
-  // Режим работы
   mode: "production" | "development" | "testnet";
-
-  // Логирование
   logging: {
     level: "debug" | "info" | "warn" | "error";
     toFile: boolean;
     dir: string;
   };
-
-  // Event Bus
   eventBus: {
     maxListeners: number;
   };
-
-  // Timeframes (для TVP Strategy)
   timeframes: {
-    htf: number; // Высший таймфрейм (минуты)
-    mtf: number; // Средний таймфрейм (минуты)
-    ltf: string; // Младший таймфрейм (ticks)
+    htf: number;
+    mtf: number;
+    ltf: string;
   };
 }
 
-/**
- * Получить значение переменной окружения или выбросить ошибку
- *
- * @param key - название переменной
- * @param defaultValue - значение по умолчанию (опционально)
- * @returns значение переменной
- * @throws {Error} если переменная не найдена и нет значения по умолчанию
- */
-function getEnvVar(key: string, defaultValue?: string): string {
-  const value = process.env[key] || defaultValue;
-
-  if (value === undefined) {
-    throw new Error(
-      `❌ Переменная окружения ${key} не найдена! Проверьте .env файл.`
-    );
-  }
-
-  return value;
-}
-
-/**
- * Получить числовое значение переменной окружения
- *
- * @param key - название переменной
- * @param defaultValue - значение по умолчанию
- * @returns числовое значение
- */
-function getEnvNumber(key: string, defaultValue: number): number {
-  const value = process.env[key];
-
-  if (value === undefined) {
-    return defaultValue;
-  }
-
-  const parsed = parseInt(value, 10);
-
-  if (isNaN(parsed)) {
-    throw new Error(
-      `❌ Переменная окружения ${key} должна быть числом! Получено: ${value}`
-    );
-  }
-
-  return parsed;
-}
-
-/**
- * Получить булево значение переменной окружения
- *
- * @param key - название переменной
- * @param defaultValue - значение по умолчанию
- * @returns булево значение
- */
-function getEnvBoolean(key: string, defaultValue: boolean): boolean {
-  const value = process.env[key];
-
-  if (value === undefined) {
-    return defaultValue;
-  }
-
-  return value.toLowerCase() === "true";
-}
-
-/**
- * Валидация конфигурации
- *
- * @param config - объект конфигурации
- * @throws {Error} если конфигурация некорректна
- */
-function validateConfig(config: AppConfig): void {
-  // Проверяем API ключи
-  if (config.gateio.apiKey === "your_api_key_here") {
-    throw new Error(
-      "❌ GATE_API_KEY не настроен! Получите ключи на https://www.gate.io/myaccount/apiv4keys"
-    );
-  }
-
-  if (config.gateio.apiSecret === "your_api_secret_here") {
-    throw new Error(
-      "❌ GATE_API_SECRET не настроен! Получите ключи на https://www.gate.io/myaccount/apiv4keys"
-    );
-  }
-
-  // Проверяем торговую пару
-  if (!config.trading.symbol || config.trading.symbol.length < 3) {
-    throw new Error("❌ SYMBOL некорректен! Пример: ETH_USDT");
-  }
-
-  // Проверяем режим работы
-  const validModes = ["production", "development", "testnet"];
-  if (!validModes.includes(config.mode)) {
-    throw new Error(`❌ MODE должен быть одним из: ${validModes.join(", ")}`);
-  }
-
-  // Проверяем уровень логирования
-  const validLogLevels = ["debug", "info", "warn", "error"];
-  if (!validLogLevels.includes(config.logging.level)) {
-    throw new Error(
-      `❌ LOG_LEVEL должен быть одним из: ${validLogLevels.join(", ")}`
-    );
-  }
-
-  // Проверяем таймфреймы
-  if (config.timeframes.htf <= config.timeframes.mtf) {
-    throw new Error("❌ HTF_TIMEFRAME должен быть больше MTF_TIMEFRAME!");
-  }
-
-  console.log("✅ Конфигурация валидна!");
-}
-
-/**
- * Загрузка и валидация конфигурации приложения
- *
- * @returns объект конфигурации
- */
 export function loadConfig(): AppConfig {
-  console.log("📋 Загрузка конфигурации...");
+  // Парсим символы
+  const symbolsString = process.env.TRADING_SYMBOLS || "BTC_USDT";
+  const symbols = symbolsString.split(",").map((s) => s.trim());
+
+  // Валидация символов
+  symbols.forEach((symbol) => {
+    if (!symbol.includes("_")) {
+      throw new Error(
+        `Invalid symbol format: ${symbol}. Expected format: BASE_QUOTE`
+      );
+    }
+  });
 
   const config: AppConfig = {
-    // Gate.io API
     gateio: {
-      apiKey: getEnvVar("GATE_API_KEY"),
-      apiSecret: getEnvVar("GATE_API_SECRET"),
-      apiUrl: getEnvVar("GATE_API_URL", "https://api.gateio.ws"),
-      wsUrl: getEnvVar("GATE_WS_URL", "wss://api.gateio.ws/ws/v4/"),
+      apiKey: process.env.GATE_API_KEY || "",
+      apiSecret: process.env.GATE_API_SECRET || "",
+      apiUrl: process.env.GATE_API_URL || "https://api.gateio.ws",
+      wsUrl: process.env.GATE_WS_URL || "wss://fx-ws.gateio.ws/v4/ws/usdt",
     },
-
-    // Торговые настройки
     trading: {
-      symbol: getEnvVar("SYMBOL", "ETH_USDT"),
-      orderBookDepth: getEnvNumber("ORDERBOOK_DEPTH", 20),
+      symbols,
+      market: (process.env.TRADING_MARKET as "spot" | "futures") || "futures",
+      leverage: parseInt(process.env.TRADING_LEVERAGE || "10"),
+      orderBookDepth: parseInt(process.env.TRADING_ORDERBOOK_DEPTH || "20"),
     },
-
-    // WebSocket Server
     server: {
-      wsPort: getEnvNumber("WS_SERVER_PORT", 8080),
+      wsPort: parseInt(process.env.WS_SERVER_PORT || "8080"),
     },
-
-    // База данных
     database: {
-      path: getEnvVar("DB_PATH", "./dtrader.db"),
-      orderBookPressureInterval: getEnvNumber(
-        "DB_ORDERBOOK_PRESSURE_INTERVAL",
-        10
+      path: process.env.DB_PATH || "./dtrader.db",
+      orderBookPressureInterval: parseInt(
+        process.env.DB_ORDERBOOK_PRESSURE_INTERVAL || "50"
       ),
-      retentionDays: getEnvNumber("DB_RETENTION_DAYS", 90),
+      retentionDays: parseInt(process.env.DB_RETENTION_DAYS || "30"),
     },
-
-    // Режим работы
-    mode: getEnvVar("MODE", "development") as
-      | "production"
-      | "development"
-      | "testnet",
-
-    // Логирование
+    mode:
+      (process.env.APP_MODE as "production" | "development" | "testnet") ||
+      "development",
     logging: {
-      level: getEnvVar("LOG_LEVEL", "info") as
-        | "debug"
-        | "info"
-        | "warn"
-        | "error",
-      toFile: getEnvBoolean("LOG_TO_FILE", false),
-      dir: getEnvVar("LOG_DIR", "./logs"),
+      level:
+        (process.env.LOG_LEVEL as "debug" | "info" | "warn" | "error") ||
+        "info",
+      toFile: process.env.LOG_TO_FILE === "true",
+      dir: process.env.LOG_DIR || "./logs",
     },
-
-    // Event Bus
     eventBus: {
-      maxListeners: getEnvNumber("EVENT_BUS_MAX_LISTENERS", 100),
+      maxListeners: parseInt(process.env.EVENTBUS_MAX_LISTENERS || "100"),
     },
-
-    // Timeframes
     timeframes: {
-      htf: getEnvNumber("HTF_TIMEFRAME", 24),
-      mtf: getEnvNumber("MTF_TIMEFRAME", 6),
-      ltf: getEnvVar("LTF_TIMEFRAME", "ticks"),
+      htf: parseInt(process.env.TIMEFRAME_HTF || "24"),
+      mtf: parseInt(process.env.TIMEFRAME_MTF || "6"),
+      ltf: process.env.TIMEFRAME_LTF || "ticks",
     },
   };
 
-  // Валидация конфигурации
+  // Валидация
   validateConfig(config);
 
-  // Выводим информацию о конфигурации
+  // Вывод конфигурации
+  console.log("📋 Загрузка конфигурации...");
+  console.log("✅ Конфигурация валидна!");
   console.log(`📊 Режим работы: ${config.mode.toUpperCase()}`);
-  console.log(`💱 Торговая пара: ${config.trading.symbol}`);
+  console.log(`💱 Торговые пары: ${config.trading.symbols.join(", ")}`);
+  console.log(`🎯 Рынок: ${config.trading.market.toUpperCase()}`);
+  console.log(`⚡ Плечо: ${config.trading.leverage}x`);
   console.log(`🔧 WebSocket Server: порт ${config.server.wsPort}`);
   console.log(
     `📈 Таймфреймы: HTF ${config.timeframes.htf}m | MTF ${config.timeframes.mtf}m | LTF ${config.timeframes.ltf}`
   );
   console.log(`💾 База данных: ${config.database.path}`);
-  console.log(`📝 Уровень логирования: ${config.logging.level.toUpperCase()}`);
-  console.log("");
+  console.log(
+    `📝 Уровень логирования: ${config.logging.level.toUpperCase()}\n`
+  );
 
   return config;
 }
 
-/**
- * Экспортируем загруженную конфигурацию
- */
+function validateConfig(config: AppConfig): void {
+  // API ключи
+  if (!config.gateio.apiKey || config.gateio.apiKey === "your_api_key_here") {
+    throw new Error("GATE_API_KEY не установлен в .env");
+  }
+
+  if (
+    !config.gateio.apiSecret ||
+    config.gateio.apiSecret === "your_api_secret_here"
+  ) {
+    throw new Error("GATE_API_SECRET не установлен в .env");
+  }
+
+  // Символы
+  if (config.trading.symbols.length === 0) {
+    throw new Error("Не указаны торговые пары в TRADING_SYMBOLS");
+  }
+
+  // Плечо
+  if (config.trading.market === "futures") {
+    if (config.trading.leverage < 1 || config.trading.leverage > 125) {
+      throw new Error("Плечо должно быть от 1 до 125");
+    }
+  }
+
+  // Режим
+  if (!["production", "development", "testnet"].includes(config.mode)) {
+    throw new Error(
+      "APP_MODE должен быть: production, development или testnet"
+    );
+  }
+
+  // Уровень логирования
+  if (!["debug", "info", "warn", "error"].includes(config.logging.level)) {
+    throw new Error("LOG_LEVEL должен быть: debug, info, warn или error");
+  }
+}
+
 export const config = loadConfig();
