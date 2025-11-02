@@ -228,4 +228,4 @@ class CandleStore {
 }
 
 // Singleton экспорт
-export const candleStore = new CandleStore(config.trading.symbol);
+export const candleStore = new CandleStore(config.trading.symbols[0]);

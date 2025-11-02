@@ -99,7 +99,9 @@ export class TickStore {
     // Каждые 5 тиков — информативный лог
     if (this.tickCount % 5 === 0) {
       logger.info(
-        `📊 Тик #${this.tickCount}: ${tick.symbol} @ ${tick.price.toFixed(2)} USDT (24ч: ${tick.change24h.toFixed(2)}%)`,
+        `📊 Тик #${this.tickCount}: ${tick.symbol} @ ${tick.price.toFixed(
+          2
+        )} USDT (24ч: ${tick.change24h.toFixed(2)}%)`,
         LogCategory.INTERNAL
       );
     }
@@ -288,4 +290,4 @@ export class TickStore {
 }
 
 // Singleton экспорт
-export const tickStore = new TickStore(config.trading.symbol);
+export const tickStore = new TickStore(config.trading.symbols[0]);

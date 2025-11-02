@@ -9,7 +9,7 @@ import { LogCategory } from "./logger/types";
 
 // Exchange
 import { GateioClient } from "./exchange/GateioClient";
-import { GateioWebSocket } from "./exchange/GateioWebSocket";
+import { FuturesWebSocket } from "./exchange/FuturesWebSocket";
 
 // Data Layer
 import { tickStore } from "./data/TickStore";
@@ -31,9 +31,9 @@ const gateioClient = new GateioClient({
   apiUrl: config.gateio.apiUrl,
 });
 
-const gateioWebSocket = new GateioWebSocket({
+const futuresWebSocket = new FuturesWebSocket({
   wsUrl: config.gateio.wsUrl,
-  currencyPair: config.trading.symbols[0],
+  symbols: config.trading.symbols, // 🔥 Весь массив, не [0]!
   pingInterval: 15000,
   pongTimeout: 30000,
   maxReconnectAttempts: 10,
@@ -255,6 +255,9 @@ function startCandleUpdater(): void {
 // УТИЛИТЫ
 // ============================================================================
 
+/**
+ * Проверка, является ли ошибка сетевой
+ */
 function isNetworkError(error: any): boolean {
   const networkErrors = [
     "ECONNREFUSED",
@@ -270,11 +273,15 @@ function isNetworkError(error: any): boolean {
   );
 }
 
+/**
+ * Статистика системы
+ */
 function showSystemStats(): void {
   const eventStats = eventBus.getStats();
   const tickStats = tickStore.getStats();
   const obStats = orderBookStore.getStats();
 
+  // Статистика свечей
   const stats1m = candleStore.getStats("1m");
   const stats6m = candleStore.getStats("6m");
   const stats24m = candleStore.getStats("24m");
@@ -337,6 +344,7 @@ async function main(): Promise<void> {
       LogCategory.SYSTEM
     );
 
+    // 1. Проверка баланса
     logger.info("💰 Проверка баланса...", LogCategory.SYSTEM);
     const balances = await gateioClient.getBalance();
     logger.success(
@@ -344,6 +352,7 @@ async function main(): Promise<void> {
       LogCategory.SYSTEM
     );
 
+    // 2. Получение тикера
     logger.info("📊 Получение данных рынка...", LogCategory.SYSTEM);
     const ticker = await gateioClient.getTicker(config.trading.symbols[0]);
     logger.success(
@@ -351,18 +360,26 @@ async function main(): Promise<void> {
       LogCategory.SYSTEM
     );
 
+    // 3. Инициализация хранилищ данных
     logger.info("🗄️ Инициализация хранилищ...", LogCategory.SYSTEM);
+    // tickStore уже создан в src/data/TickStore.ts
+    // orderBookStore создан выше
+    // candleStore создан в src/data/CandleStore.ts
 
+    // 4. Синхронизация Order Book
     logger.info("📖 Синхронизация Order Book...", LogCategory.SYSTEM);
     await orderBookStore.sync();
     orderBookStore.debug();
 
+    // 5. Инициализация свечей
     await initializeCandleData();
 
+    // 6. Подключение WebSocket
     logger.info("🔌 Подключение к Gate.io WebSocket...", LogCategory.SYSTEM);
-    await gateioWebSocket.connect();
-    await gateioWebSocket.subscribe();
+    await futuresWebSocket.connect();
+    await futuresWebSocket.subscribe();
 
+    // 7. Система готова
     eventBus.emitSafe("system:ready");
     logger.success("🎯 СИСТЕМА ГОТОВА К ТОРГОВЛЕ!", LogCategory.SYSTEM);
     logger.success(
@@ -370,6 +387,7 @@ async function main(): Promise<void> {
       LogCategory.SYSTEM
     );
 
+    // Вывод статистики каждые 5 минут
     setInterval(() => {
       showSystemStats();
     }, 5 * 60 * 1000);
@@ -381,19 +399,27 @@ async function main(): Promise<void> {
   }
 }
 
+// ============================================================================
+// ОБРАБОТКА СИГНАЛОВ ЗАВЕРШЕНИЯ
+// ============================================================================
+
 process.on("SIGINT", () => {
   logger.warn("⚠️ Получен SIGINT, завершение работы...", LogCategory.SYSTEM);
-  gateioWebSocket.disconnect();
+  futuresWebSocket.disconnect();
   showSystemStats();
   process.exit(0);
 });
 
 process.on("SIGTERM", () => {
   logger.warn("⚠️ Получен SIGTERM, завершение работы...", LogCategory.SYSTEM);
-  gateioWebSocket.disconnect();
+  futuresWebSocket.disconnect();
   showSystemStats();
   process.exit(0);
 });
+
+// ============================================================================
+// ЗАПУСК
+// ============================================================================
 
 main().catch((error) => {
   logger.error("💥 Необработанная ошибка", LogCategory.SYSTEM, { error });
